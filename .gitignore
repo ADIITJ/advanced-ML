@@ -23,3 +23,8 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+
+dataset/
+torch_cache/
+cache/
+__pycache__/
