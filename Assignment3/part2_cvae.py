@@ -10,7 +10,7 @@ on class labels via one-hot concatenation. Features:
 - Comprehensive output pipeline: loss curves, reconstructions,
   conditional grids, and digit-to-digit latent interpolation
 
-Author : Assignment 3 — Advanced ML
+Author : Samay Mehar (B22AI048)
 Hardware: NVIDIA RTX 3060 Laptop GPU (6 GB VRAM)
 """
 

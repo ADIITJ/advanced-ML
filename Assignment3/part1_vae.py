@@ -8,7 +8,7 @@ Production-grade implementation of a fully-connected VAE with:
 - Comprehensive output pipeline: loss curves, reconstructions,
   generated samples, latent space PCA, and latent interpolation
 
-Author : Assignment 3 — Advanced ML
+Author : Samay Mehar (B22AI048)
 Hardware: NVIDIA RTX 3060 Laptop GPU (6 GB VRAM)
 """
 
