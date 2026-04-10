@@ -1,0 +1,7 @@
+PPO Comparison Summary
+Environment: CartPole-v1
+Total timesteps per run: 6000
+Clipped final avg return (last 20 episodes): 72.45
+Unclipped final avg return (last 20 episodes): 51.05
+Performance plot: outputs\ppo_clipped_vs_unclipped.png
+Policy rollout videos folder: outputs\videos

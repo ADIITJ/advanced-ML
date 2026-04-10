@@ -1,0 +1,21 @@
+PPO Comparison Summary
+Environment: CartPole-v1
+Total timesteps per run: 80000
+Clipped final avg return (last 20 episodes): 435.65
+Unclipped final avg return (last 20 episodes): 280.75
+Clipped deterministic eval mean±std (30 eps): 483.40 ± 41.80
+Unclipped deterministic eval mean±std (30 eps): 412.53 ± 73.09
+Performance plot: outputs_tuned_seed_303\ppo_clipped_vs_unclipped.png
+Policy rollout videos folder: outputs_tuned_seed_303\videos
+Hyperparameters:
+  learning_rate=0.00025
+  rollout_steps=2048
+  update_epochs=10
+  num_minibatches=8
+  clip_coef=0.2
+  ent_coef=0.0
+  vf_coef=0.5
+  gamma=0.99
+  gae_lambda=0.95
+  max_grad_norm=0.5
+  hidden_size=64
