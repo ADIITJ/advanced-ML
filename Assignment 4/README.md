@@ -22,6 +22,9 @@ This assignment implements **Proximal Policy Optimization (PPO)** from scratch a
 6. **Objective functions**
    - Clipped objective
    - Unclipped objective
+7. **Linear learning rate annealing** (enabled by default, as in the PPO paper)
+8. **KL divergence tracking** (approximate KL between old and new policy per update)
+9. **Diagnostic plots** (KL, clip fraction, entropy, LR schedule over training)
 
 ## Setup
 
@@ -55,9 +58,10 @@ Notes:
 
 After execution, the script saves:
 
-- `outputs/ppo_clipped_vs_unclipped.png`
-- `outputs/results_summary.txt`
+- `outputs/ppo_clipped_vs_unclipped.png` - learning curve comparison
+- `outputs/ppo_diagnostics.png` - KL divergence, clip fraction, entropy, and LR schedule
+- `outputs/results_summary.txt` - evaluation stats, hyperparameters, and paths
 
-The summary file now includes deterministic evaluation mean and standard deviation for both variants.
+The summary file includes deterministic evaluation mean and standard deviation for both variants.
 
 Use these artifacts in your report.

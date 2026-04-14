@@ -30,6 +30,7 @@ class PPOConfig:
     seed: int = 42
     hidden_size: int = 64
     render: bool = False
+    anneal_lr: bool = True
 
 
 class ActorCritic(nn.Module):
@@ -195,6 +196,7 @@ def ppo_update(
     batch_size = len(buffer.rewards)
     minibatch_size = batch_size // config.num_minibatches
     clipfracs = []
+    kl_values = []
 
     policy_loss_value = 0.0
     value_loss_value = 0.0
@@ -217,8 +219,11 @@ def ppo_update(
             ratio = logratio.exp()
 
             with torch.no_grad():
+                old_approx_kl = (-logratio).mean().item()
+                approx_kl = ((ratio - 1) - logratio).mean().item()
                 clipfrac = ((ratio - 1.0).abs() > config.clip_coef).float().mean().item()
                 clipfracs.append(clipfrac)
+                kl_values.append(approx_kl)
 
             if clipped_objective:
                 pg_loss1 = -b_advantages[mb_idx] * ratio
@@ -252,6 +257,7 @@ def ppo_update(
         "value_loss": value_loss_value,
         "entropy": entropy_loss_value,
         "clipfrac": float(np.mean(clipfracs)) if clipfracs else 0.0,
+        "approx_kl": float(np.mean(kl_values)) if kl_values else 0.0,
         "explained_variance": float(ev),
     }
 
@@ -277,12 +283,27 @@ def train_ppo(config: PPOConfig, clipped_objective: bool = True):
     next_obs = obs
     next_done = 0.0
 
+    num_updates = config.total_timesteps // config.rollout_steps
+
     global_step = 0
+    update_idx = 0
     episode_returns: List[float] = []
     timestep_points: List[int] = []
     rolling_avg_returns: List[float] = []
+    kl_history: List[float] = []
+    clipfrac_history: List[float] = []
+    entropy_history: List[float] = []
+    lr_history: List[float] = []
 
     while global_step < config.total_timesteps:
+        if config.anneal_lr:
+            frac = 1.0 - update_idx / num_updates
+            lr_now = config.learning_rate * frac
+            for param_group in optimizer.param_groups:
+                param_group["lr"] = lr_now
+        else:
+            lr_now = config.learning_rate
+
         next_obs, next_done, returns_from_rollout = collect_rollout(
             env,
             model,
@@ -323,12 +344,18 @@ def train_ppo(config: PPOConfig, clipped_objective: bool = True):
         )
         timestep_points.append(global_step)
         rolling_avg_returns.append(avg_return)
+        kl_history.append(stats["approx_kl"])
+        clipfrac_history.append(stats["clipfrac"])
+        entropy_history.append(stats["entropy"])
+        lr_history.append(lr_now)
 
+        update_idx += 1
         variant = "CLIPPED" if clipped_objective else "UNCLIPPED"
         print(
             f"[{variant}] steps={global_step} avg_return(20)={avg_return:.2f} "
             f"policy_loss={stats['policy_loss']:.4f} value_loss={stats['value_loss']:.4f} "
             f"entropy={stats['entropy']:.4f} clipfrac={stats['clipfrac']:.4f} "
+            f"approx_kl={stats['approx_kl']:.6f} lr={lr_now:.6f} "
             f"explained_var={stats['explained_variance']:.4f}"
         )
 
@@ -339,6 +366,10 @@ def train_ppo(config: PPOConfig, clipped_objective: bool = True):
         "timestep_points": timestep_points,
         "rolling_avg_returns": rolling_avg_returns,
         "episode_returns": episode_returns,
+        "kl_history": kl_history,
+        "clipfrac_history": clipfrac_history,
+        "entropy_history": entropy_history,
+        "lr_history": lr_history,
     }
 
 
@@ -460,6 +491,68 @@ def plot_results(
     plt.close()
 
 
+def plot_diagnostics(
+    clipped_history: Dict[str, List[float]],
+    unclipped_history: Dict[str, List[float]],
+    output_dir: str,
+):
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+
+    # KL divergence
+    ax = axes[0, 0]
+    ax.plot(clipped_history["timestep_points"], clipped_history["kl_history"],
+            label="Clipped", linewidth=1.5)
+    ax.plot(unclipped_history["timestep_points"], unclipped_history["kl_history"],
+            label="Unclipped", linewidth=1.5, linestyle="--")
+    ax.set_ylabel("Approx KL Divergence")
+    ax.set_xlabel("Timesteps")
+    ax.set_title("Policy KL Divergence per Update")
+    ax.legend()
+    ax.grid(alpha=0.3)
+
+    # Clip fraction
+    ax = axes[0, 1]
+    ax.plot(clipped_history["timestep_points"], clipped_history["clipfrac_history"],
+            label="Clipped", linewidth=1.5)
+    ax.plot(unclipped_history["timestep_points"], unclipped_history["clipfrac_history"],
+            label="Unclipped", linewidth=1.5, linestyle="--")
+    ax.set_ylabel("Clip Fraction")
+    ax.set_xlabel("Timesteps")
+    ax.set_title("Fraction of Clipped Ratios per Update")
+    ax.legend()
+    ax.grid(alpha=0.3)
+
+    # Entropy
+    ax = axes[1, 0]
+    ax.plot(clipped_history["timestep_points"], clipped_history["entropy_history"],
+            label="Clipped", linewidth=1.5)
+    ax.plot(unclipped_history["timestep_points"], unclipped_history["entropy_history"],
+            label="Unclipped", linewidth=1.5, linestyle="--")
+    ax.set_ylabel("Policy Entropy")
+    ax.set_xlabel("Timesteps")
+    ax.set_title("Policy Entropy over Training")
+    ax.legend()
+    ax.grid(alpha=0.3)
+
+    # Learning rate
+    ax = axes[1, 1]
+    ax.plot(clipped_history["timestep_points"], clipped_history["lr_history"],
+            label="Clipped", linewidth=1.5)
+    ax.plot(unclipped_history["timestep_points"], unclipped_history["lr_history"],
+            label="Unclipped", linewidth=1.5, linestyle="--")
+    ax.set_ylabel("Learning Rate")
+    ax.set_xlabel("Timesteps")
+    ax.set_title("Learning Rate Schedule")
+    ax.legend()
+    ax.grid(alpha=0.3)
+
+    plt.tight_layout()
+    path = os.path.join(output_dir, "ppo_diagnostics.png")
+    plt.savefig(path, dpi=150)
+    plt.close()
+    return path
+
+
 def run_comparison(config: PPOConfig, output_dir: str, eval_episodes: int = 30):
     os.makedirs(output_dir, exist_ok=True)
 
@@ -506,6 +599,8 @@ def run_comparison(config: PPOConfig, output_dir: str, eval_episodes: int = 30):
     plot_path = os.path.join(output_dir, "ppo_clipped_vs_unclipped.png")
     plot_results(clipped_history, unclipped_history, plot_path)
 
+    diagnostics_path = plot_diagnostics(clipped_history, unclipped_history, output_dir)
+
     clipped_final = (
         float(np.mean(clipped_history["episode_returns"][-20:]))
         if clipped_history["episode_returns"]
@@ -525,6 +620,7 @@ def run_comparison(config: PPOConfig, output_dir: str, eval_episodes: int = 30):
         "unclipped_eval_mean": unclipped_eval["mean"],
         "unclipped_eval_std": unclipped_eval["std"],
         "plot_path": plot_path,
+        "diagnostics_path": diagnostics_path,
         "video_dir": video_dir,
     }
 
@@ -543,7 +639,9 @@ def run_comparison(config: PPOConfig, output_dir: str, eval_episodes: int = 30):
             f"Unclipped deterministic eval mean±std ({eval_episodes} eps): "
             f"{unclipped_eval['mean']:.2f} ± {unclipped_eval['std']:.2f}\n"
         )
+        f.write(f"LR annealing: {config.anneal_lr}\n")
         f.write(f"Performance plot: {plot_path}\n")
+        f.write(f"Diagnostics plot: {diagnostics_path}\n")
         f.write(f"Policy rollout videos folder: {video_dir}\n")
         f.write("Hyperparameters:\n")
         f.write(f"  learning_rate={config.learning_rate}\n")
@@ -594,6 +692,8 @@ def parse_args():
     parser.add_argument("--eval-episodes", type=int, default=30, help="Evaluation episodes")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--render", action="store_true", help="Render during training")
+    parser.add_argument("--anneal-lr", action="store_true", default=True, help="Linear LR annealing")
+    parser.add_argument("--no-anneal-lr", dest="anneal_lr", action="store_false", help="Disable LR annealing")
     parser.add_argument("--output-dir", type=str, default="outputs", help="Output directory")
     return parser.parse_args()
 
@@ -617,6 +717,7 @@ def main():
         hidden_size=args.hidden_size,
         seed=args.seed,
         render=args.render,
+        anneal_lr=args.anneal_lr,
     )
 
     run_comparison(config, args.output_dir, eval_episodes=args.eval_episodes)
