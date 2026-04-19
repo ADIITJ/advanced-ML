@@ -2,18 +2,20 @@
 
 Implementation of **Proximal Policy Optimization (PPO)** from scratch on `CartPole-v1` (Gymnasium), comparing the **clipped** vs **unclipped** policy objective.
 
+---
+
 ## Results
 
-### Tuned Run (120k timesteps)
+### Main Run — 120k Timesteps (Tuned, Seed 42)
 
 | Variant | Final Avg Return (last 20 eps) | Deterministic Eval — 50 eps |
 |---|---|---|
 | Clipped PPO | 407.85 | **497.38 ± 12.87** |
 | Unclipped PPO | 437.35 | 500.00 ± 0.00 |
 
-CartPole-v1 maximum is 500. Clipped PPO reaches near-optimal consistently; unclipped reaches 500 in this run but collapses intermittently — the multi-seed results below show the instability.
+CartPole-v1 maximum possible return is 500. Clipped PPO reaches near-optimal reliably; unclipped hits 500 here but collapses mid-training — the multi-seed results below reveal the instability.
 
-### Multi-Seed Robustness (80k timesteps, 3 seeds)
+### Multi-Seed Robustness — 80k Timesteps (3 Seeds)
 
 | Seed | Clipped Eval | Unclipped Eval |
 |---|---|---|
@@ -22,54 +24,42 @@ CartPole-v1 maximum is 500. Clipped PPO reaches near-optimal consistently; uncli
 | 303 | 483.40 | 412.53 |
 | **Mean** | **452.10 ± 56.41** | **448.48 ± 37.37** |
 
-Clipped training return mean: **368.90** vs Unclipped: **297.82**. Clipped is more stable during training even when final eval scores are comparable.
+Clipped training return mean: **368.90** | Unclipped: **297.82**
 
-### Baseline Run (40k timesteps)
-
-| Variant | Final Avg Return | Deterministic Eval — 30 eps |
-|---|---|---|
-| Clipped PPO | 224.85 | **466.17 ± 59.20** |
-| Unclipped PPO | 237.95 | 357.90 ± 105.19 |
-
-Unclipped has 2× higher std in eval — clear instability signature.
+Clipped is more stable during training even when final eval scores are comparable across seeds.
 
 ---
 
 ## Plots
 
-### Learning Curves — Clipped vs Unclipped (120k)
+### Learning Curves — Clipped vs Unclipped
 
-![Learning Curves](outputs_tuned_120k_v2/ppo_clipped_vs_unclipped.png)
+![Learning Curves](outputs_final/ppo_clipped_vs_unclipped.png)
 
-### Diagnostic Plots — KL Divergence, Clip Fraction, Entropy, LR Schedule (120k)
+### Training Diagnostics — KL Divergence, Clip Fraction, Entropy, LR Schedule
 
-![Diagnostics](outputs_tuned_120k_v2/ppo_diagnostics.png)
+![Diagnostics](outputs_final/ppo_diagnostics.png)
 
-The KL divergence panel shows the core difference: unclipped PPO makes large policy updates (KL spikes to ~0.18) while clipped PPO stays under 0.01 throughout — this is why clipping stabilises training.
-
-### Learning Curves — Baseline 40k Run
-
-![Learning Curves 40k](outputs_new/ppo_clipped_vs_unclipped.png)
-
-### Diagnostic Plots — Baseline 40k Run
-
-![Diagnostics 40k](outputs_new/ppo_diagnostics.png)
+The KL divergence panel shows the core difference between the two variants:
+- **Clipped PPO**: KL stays under 0.01 throughout training — policy updates are constrained
+- **Unclipped PPO**: KL spikes to ~0.18 at step 14k and again at ~37k — large unconstrained policy jumps cause the visible performance collapses in the learning curve
 
 ---
 
 ## PPO Components Implemented
 
-All procedures are implemented from scratch in `ppo_from_scratch.py`:
+All procedures implemented from scratch in `ppo_from_scratch.py`:
 
-1. **Policy network (Actor)** — 2-layer MLP, Tanh activations, categorical action distribution
-2. **Value network (Critic)** — separate 2-layer MLP, scalar output
-3. **Rollout generation** — fixed-horizon collection with pre-allocated numpy buffers
+1. **Policy network (Actor)** — 2-layer MLP (64 hidden), Tanh activations, Categorical distribution
+2. **Value network (Critic)** — separate 2-layer MLP (64 hidden), scalar state-value output
+3. **Rollout generation** — fixed-horizon collection, pre-allocated numpy buffers
 4. **Reward handling and return estimation** — bootstrapped GAE returns
-5. **Advantage estimation (GAE)** — reverse sweep with γ and λ
-6. **PPO objective** — clipped (`min(r·A, clip(r,1±ε)·A)`) and unclipped (`r·A`) variants
-7. **Linear LR annealing** — decays learning rate to zero over training (PPO paper default)
-8. **KL divergence tracking** — approximate KL per update for diagnostics
-9. **Diagnostic plots** — KL, clip fraction, entropy, LR schedule over training
+5. **Advantage estimation (GAE)** — reverse sweep: `A_t = δ_t + γλ·A_{t+1}`
+6. **PPO clipped objective** — `L = E[min(r·A, clip(r, 1-ε, 1+ε)·A)]`
+7. **Unclipped objective** — vanilla `L = E[r·A]` (importance-sampled policy gradient)
+8. **Linear LR annealing** — decays learning rate linearly to zero over training (PPO paper default)
+9. **KL divergence tracking** — approximate KL per update: `E[(r-1) - log(r)]`
+10. **Diagnostic plots** — KL, clip fraction, entropy, LR schedule over training
 
 ---
 
@@ -79,14 +69,17 @@ All procedures are implemented from scratch in `ppo_from_scratch.py`:
 Assignment 4/
 ├── ppo_from_scratch.py          # Full PPO implementation
 ├── requirements.txt
-├── report.md                    # Full assignment report with findings
+├── report.md                    # Assignment report with findings
 ├── hyperparameter_analysis.md   # Hyperparameter tuning notes
-├── outputs/                     # Default 40k run
-├── outputs_new/                 # Baseline run with diagnostics
-├── outputs_tuned_120k_v2/       # Tuned 120k run (main results)
-├── outputs_tuned_seed_101/      # Robustness seed 101
-├── outputs_tuned_seed_202/      # Robustness seed 202
-└── outputs_tuned_seed_303/      # Robustness seed 303
+└── outputs_final/               # Final run outputs (120k tuned)
+    ├── ppo_clipped_vs_unclipped.png
+    ├── ppo_diagnostics.png
+    ├── results_summary.txt
+    └── videos/
+        ├── clipped_policy-episode-0.mp4
+        ├── clipped_policy-episode-1.mp4
+        ├── unclipped_policy-episode-0.mp4
+        └── unclipped_policy-episode-1.mp4
 ```
 
 ---
@@ -121,7 +114,7 @@ python ppo_from_scratch.py \
   --max-grad-norm 0.5 \
   --hidden-size 64 \
   --eval-episodes 50 \
-  --output-dir outputs_tuned_120k
+  --output-dir outputs_final
 ```
 
 **Render environment during training:**
@@ -138,14 +131,14 @@ python ppo_from_scratch.py --no-anneal-lr --output-dir outputs
 
 ## Hyperparameters
 
-| Parameter | Default | Tuned |
+| Parameter | Default | Tuned (main run) |
 |---|---|---|
-| `learning_rate` | 3e-4 | 2.5e-4 |
-| `rollout_steps` | 1024 | 2048 |
+| `learning_rate` | 3e-4 | **2.5e-4** |
+| `rollout_steps` | 1024 | **2048** |
 | `update_epochs` | 10 | 10 |
 | `num_minibatches` | 8 | 8 |
 | `clip_coef` (ε) | 0.2 | 0.2 |
-| `ent_coef` | 0.01 | 0.0 |
+| `ent_coef` | 0.01 | **0.0** |
 | `vf_coef` | 0.5 | 0.5 |
 | `gamma` (γ) | 0.99 | 0.99 |
 | `gae_lambda` (λ) | 0.95 | 0.95 |
@@ -154,15 +147,15 @@ python ppo_from_scratch.py --no-anneal-lr --output-dir outputs
 | `anneal_lr` | True | True |
 
 Key tuning decisions:
-- `rollout_steps=2048` improves advantage quality over 1024
-- `lr=2.5e-4` more stable than 3e-4 at 120k steps
-- `ent_coef=0.0` helps late-stage convergence on CartPole once exploration is no longer needed
+- `rollout_steps=2048` — larger batches improve advantage quality and reduce noisy updates
+- `lr=2.5e-4` — more stable than 3e-4 over 120k steps
+- `ent_coef=0.0` — entropy bonus not needed once CartPole exploration is settled
 
 ---
 
 ## Key Findings
 
-1. **Clipping stabilises training** — KL divergence stays under 0.01 with clipping vs spikes to 0.18 without
-2. **Unclipped is higher variance** — eval std is 2× higher across seeds and runs
-3. **Both can solve CartPole** — but clipped does so more reliably across seeds
-4. **LR annealing helps** — clip fraction naturally drops to 0 in later updates as LR shrinks, preventing unnecessary gradient noise near convergence
+1. **Clipping stabilises training** — KL stays under 0.01 vs spikes to 0.18 without clipping
+2. **Unclipped is higher variance** — eval std is 2× higher; visible collapse events mid-training
+3. **Both can solve CartPole** — but clipped does so more reliably across seeds (452 vs 448 mean, lower training variance)
+4. **LR annealing helps late-stage convergence** — clip fraction naturally drops to 0 as LR shrinks, preventing gradient noise near convergence
