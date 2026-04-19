@@ -376,6 +376,21 @@ Increasing the training budget has the largest single effect on final performanc
 
 The jump from 40k to 120k timesteps (+85k steps) yields a large improvement in both training stability and deterministic evaluation score. The 6k run barely learns, confirming CartPole requires a minimum number of updates before the policy gradient signal becomes reliable.
 
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}[b]{0.48\textwidth}
+        \includegraphics[width=\textwidth]{outputs_new/ppo_clipped_vs_unclipped.png}
+        \caption{40k timesteps (rollout 1024)}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.48\textwidth}
+        \includegraphics[width=\textwidth]{outputs_final/ppo_clipped_vs_unclipped.png}
+        \caption{120k timesteps (rollout 2048)}
+    \end{subfigure}
+    \caption{Learning curves at 40k vs 120k timesteps. The 120k run reaches much higher returns and converges more smoothly for both variants.}
+    \label{fig:timestep_compare}
+\end{figure}
+
 \subsection{Effect of Rollout Steps}
 
 Rollout steps control the length of each experience buffer before a gradient update. Larger rollouts produce lower-variance advantage estimates at the cost of less frequent updates. We compare two configurations at 40k timesteps, same seed, same LR:
@@ -394,6 +409,23 @@ Rollout steps control the length of each experience buffer before a gradient upd
 \end{table}
 
 At 120k timesteps with rollout steps 2048 (tuned run), the model achieves $497.38 \pm 12.87$ eval vs $466.17 \pm 59.20$ at 40k with rollout 1024 --- a reduction in eval variance by $4.6\times$. This confirms that larger rollout buffers significantly stabilise advantage estimates and reduce policy update noise.
+
+The diagnostic plots in Figure~\ref{fig:diagnostics_compare} further illustrate this: the 40k/1024 run shows more erratic KL divergence and clip fraction behaviour compared to the smooth 120k/2048 run.
+
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}[b]{0.48\textwidth}
+        \includegraphics[width=\textwidth]{outputs_new/ppo_diagnostics.png}
+        \caption{40k timesteps, rollout 1024}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.48\textwidth}
+        \includegraphics[width=\textwidth]{outputs_final/ppo_diagnostics.png}
+        \caption{120k timesteps, rollout 2048}
+    \end{subfigure}
+    \caption{Diagnostic plots comparing rollout size and timestep budget. Larger rollouts produce smoother KL and clip fraction curves, confirming lower-variance advantage estimates.}
+    \label{fig:diagnostics_compare}
+\end{figure}
 
 \subsection{Effect of Learning Rate}
 
@@ -455,6 +487,21 @@ Yes & 224.85 & $466.17 \pm 59.20$ \\
 
 LR annealing improves the training return by $\sim$15\% at 40k timesteps. The effect is larger at longer horizons since the policy spends more time in the convergence phase where a decaying LR prevents destabilisation.
 
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}[b]{0.48\textwidth}
+        \includegraphics[width=\textwidth]{outputs_40k/ppo_clipped_vs_unclipped.png}
+        \caption{Without LR annealing (40k)}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.48\textwidth}
+        \includegraphics[width=\textwidth]{outputs_new/ppo_clipped_vs_unclipped.png}
+        \caption{With LR annealing (40k)}
+    \end{subfigure}
+    \caption{Effect of linear LR annealing on learning curves at 40k timesteps. With annealing, both variants reach higher final returns with less oscillation in the later training phase.}
+    \label{fig:lr_anneal_compare}
+\end{figure}
+
 \subsection{Multi-Seed Robustness}
 
 Table~\ref{tab:seeds} presents the full per-seed breakdown including training returns and evaluation standard deviations, using the tuned configuration at 80k timesteps.
@@ -483,6 +530,26 @@ Key observations:
     \item Unclipped PPO shows lower eval std in seeds 202 and 303, but this is misleading --- it is simply less ambitious, converging to a lower but more consistent suboptimal policy
     \item Seed 101 is the only seed where both variants fully converge to 500 within 80k steps
 \end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}[b]{0.32\textwidth}
+        \includegraphics[width=\textwidth]{outputs_tuned_seed_101/ppo_clipped_vs_unclipped.png}
+        \caption{Seed 101}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.32\textwidth}
+        \includegraphics[width=\textwidth]{outputs_tuned_seed_202/ppo_clipped_vs_unclipped.png}
+        \caption{Seed 202}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.32\textwidth}
+        \includegraphics[width=\textwidth]{outputs_tuned_seed_303/ppo_clipped_vs_unclipped.png}
+        \caption{Seed 303}
+    \end{subfigure}
+    \caption{Per-seed learning curves (80k timesteps, tuned config). Seed 101 sees both variants converge cleanly. Seed 202 shows clipped PPO struggling mid-training while unclipped happens to converge. Seed 303 shows the opposite --- unclipped collapses while clipped converges more reliably.}
+    \label{fig:seed_curves}
+\end{figure}
 
 \subsection{Summary of Hyperparameter Effects}
 
